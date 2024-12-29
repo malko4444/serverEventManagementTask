@@ -21,36 +21,55 @@ connectDB();
 //verification
 
 const secretKey = 'lkasdfjlkasdsadasdsafssdfsdfsdf#sadfs$@%JSDFsdf';
-
 const authVerify = (req, res, next) => {
     try {
-        console.log('req.headers recieved', req.headers);
+        console.log('Headers received:', req.headers);
+
+        // Check if the Authorization header exists
         if (!req.headers.authorization) {
-            res.json({
+            return res.json({
                 data: [],
                 status: "error",
                 error: "Login required"
-            })
+            });
         }
-        var decoded = jwt.verify(req.headers.authorization, secretKey);
-        console.log('decoded', decoded);
+
+        // Extract the token from the Authorization header
+        const token = req.headers.authorization.split(" ")[1];
+        if (!token) {
+            return res.json({
+                data: [],
+                status: "error",
+                error: "Invalid token"
+            });
+        }
+
+        // Verify the token
+        const decoded = jwt.verify(token, secretKey);
+        console.log('Decoded token:', decoded);
+
         if (!decoded) {
-            res.json({
+            return res.json({
                 data: [],
                 status: "error",
                 error: "Login required"
-            })
+            });
         }
+
+        // Attach user data to the request body
         req.body.user = decoded;
+
+        // Proceed to the next middleware or route
         next();
     } catch (error) {
-        res.json({
+        console.error('Error in authVerify:', error);
+        return res.json({
             data: [],
             status: "error",
-            error: error
-        })
+            error: error.message || "Authentication error"
+        });
     }
-}
+};
 
 
 
@@ -150,40 +169,63 @@ const Userexperience = mongoose.model(
 );
 
 
-app.post('/experience/post',authVerify, async (req, res) => {
+
+
+// Define the schema for the events collection
+const EventSchema = new mongoose.Schema({
+    title: { type: String, required: true },
+    description: { type: String, required: true },
+    image: { type: String, required: true },
+    token:{type: String, required:true},
+    location: { type: String, required: true },
+    category: { type: String, required: true },
+    eventDate: { type: Date, required: true },
+}, { timestamps: true }); // Timestamps will auto-include createdAt and updatedAt
+
+// Create a new model for events
+const Event = mongoose.model('Event', EventSchema, 'events'); // 'events' is the collection name in MongoDB
+
+
+
+
+app.post('/experience/post', authVerify, async (req, res) => {
     try {
-        console.log("data in api");
-        console.log("token in backend",token);
-        
-        let newExperience = new Userexperience({
-            
-            id: req.body?.id,
-            token: req.body?.token,
-            title: req.body?.title,
-            description: req.body?.description,
-            image: req.body?.image,
-        })
-        let output = await newExperience.save();
+        console.log("data in API");
+        console.log("token in backend", req.body.token); // Fix token reference
+
+        // Create a new event with the fields sent from the frontend
+        let newEvent = new Event({
+            title: req.body.title,
+            description: req.body.description,
+            image: req.body.image,
+            token:req.body.token,
+            location: req.body.location, // New field for location
+            category: req.body.category, // New field for category
+            eventDate: req.body.eventDate // New field for event date
+        });
+
+        // Save the event data to the events collection in the database
+        let savedEvent = await newEvent.save();
+
+        // Send success response with saved event data
         res.json({
-            data: output,
+            data: savedEvent,
             status: "success"
-        })
-
-
-
-
+        });
 
     } catch (error) {
+        // Handle errors and send failure response
+        console.error("Error:", error);
         res.json({
-            error: error,
+            error: error.message,
             data: []
-        })
+        });
     }
-})
+});
 app.get('/experince/get', async (req, res) => {
     try {
         console.log("data in api");
-        let output = await Userexperience.find();
+        let output = await Event.find();
         res.json({
             data: output,
             status: "success"
@@ -199,7 +241,7 @@ app.get('/experince/get', async (req, res) => {
 app.delete('/experience/delete/:id', async (req, res) => {
     try {
         let id = req.params?.id;
-        let experience = await Userexperience.findOneAndDelete({_id:id});
+        let experience = await Event.findOneAndDelete({_id:id});
         res.json({
             data:experience,
             status: "success"
@@ -217,7 +259,7 @@ app.delete('/experience/delete/:id', async (req, res) => {
 app.put('/experience/update/:id', async (req, res) => {
     try {
         let id = req.params?.id;
-        let experience = await Userexperience.findOneAndUpdate({_id:id}, req.body, {new: true})
+        let experience = await Event.findOneAndUpdate({_id:id}, req.body, {new: true})
         res.json({
             data: experience,
             status: "success"
@@ -355,7 +397,7 @@ app.post('/auth/login', async (req, res) => {
                 token:token,
                 email: userFound.email,
                 name: userFound.name,
-                address: userFound.address
+                address: userFound.contact
             },
             status: "success"
         })
